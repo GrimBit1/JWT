@@ -6,20 +6,15 @@ const User = require("../models/User");
 
 const bcrypt = require("bcrypt");
 
-//Validation
-const yup = require("yup");
+const jwt = require("jsonwebtoken");
 
-const userschema = yup.object({
-  name: yup.string().required(),
-  email: yup.string().email().required(),
-  password: yup.string().required(),
-});
+const { registerValidation, loginValidation } = require("../validation");
 
 router.post("/register", async (req, res) => {
   // Validate the data
   try {
-    let uservalidate = await userschema.validateSync(req.body);
-    console.log(uservalidate);
+    registerValidation(req.body);
+
     let userAlready = await User.findOne({ email: req.body.email });
     if (!userAlready) {
       const saltRounds = 10;
@@ -38,30 +33,38 @@ router.post("/register", async (req, res) => {
         password: encryptedPassword,
       });
       let userSaved = await user.save();
-      res.json("Data Saved Successfully")
+      res.json("Data Saved Successfully");
     } else {
       res.status(400).send("Email Already Exists");
     }
   } catch (error) {
-    res.status(403).send(error.errors);
-    console.log(error.errors);
-    console.log(error);
+    res.status(403).send(error.errors ?? error);
   }
 });
 
 router.post("/login", async (req, res) => {
-  const user = await User.findOne({ email: req.body.email });
+  try {
+    loginValidation(req.body);
+    const user = await User.findOne({ email: req.body.email });
 
-  if (!!user) {
-    let PasswordisTrue = await bcrypt.compare(req.body.password, user.password);
+    if (!!user) {
+      let PasswordisTrue = await bcrypt.compare(
+        req.body.password,
+        user.password
+      );
 
-    if (PasswordisTrue) {
-      res.send("Successfully Logged In");
+      if (PasswordisTrue) {
+        const token = jwt.sign({ _id: user._id }, process.env.TOKEN_SECRET);
+        res.header("auth-token", token).send("Succesfully logged in");
+        // console.log(token);
+      } else {
+        res.status(403).send("Invalid Password");
+      }
     } else {
-      res.status(403).send("Invalid Password");
+      res.status(403).send("User not Found");
     }
-  } else {
-    res.status(403).send("User not Found");
+  } catch (error) {
+    res.status(403).send(error.errors ?? error);
   }
 });
 
